@@ -1,9 +1,17 @@
 
 const Database = require("better-sqlite3");
 const path = require("path");
+const fs = require("fs");
 
+// Use Render's persistent disk when deployed.
+// Use the project folder when running locally.
 const dbPath = process.env.DB_FILE ||
     path.join(__dirname, "eventpilot.db");
+
+// Create the directory if it does not exist.
+fs.mkdirSync(path.dirname(dbPath), {
+    recursive: true
+});
 
 const db = new Database(dbPath);
 
@@ -13,14 +21,9 @@ db.pragma("journal_mode = WAL");
 // SQLite compatibility layer
 const pool = {
     async query(sql, params = []) {
-
-        // Convert PostgreSQL placeholders ($1, $2, etc.)
-        // into SQLite positional placeholders (?)
         const sqliteSQL = sql.replace(/\$\d+/g, "?");
-
         const statement = db.prepare(sqliteSQL);
 
-        // SELECT queries
         if (/^\s*(SELECT|PRAGMA|WITH)\b/i.test(sqliteSQL)) {
             const rows = statement.all(...params);
 
@@ -30,7 +33,6 @@ const pool = {
             };
         }
 
-        // INSERT / UPDATE with RETURNING
         if (/\bRETURNING\b/i.test(sqliteSQL)) {
             const rows = statement.all(...params);
 
@@ -40,7 +42,6 @@ const pool = {
             };
         }
 
-        // INSERT, UPDATE and DELETE
         const result = statement.run(...params);
 
         return {
@@ -51,7 +52,6 @@ const pool = {
     }
 };
 
-// Create database tables
 async function initializeDatabase() {
     db.exec(`
         CREATE TABLE IF NOT EXISTS users (
